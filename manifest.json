@@ -1,0 +1,16 @@
+{
+  "short_name": "Pesos App",
+  "name": "Control de Pesos por Lote",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2822/2822452.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#4f46e5",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait"
+}
