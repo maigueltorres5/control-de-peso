@@ -1,24 +1,523 @@
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Pesos por Lote (Multiusuario)</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyBo6w41Ruto2iOo9-XBiCypTDtF7fvE0yU",
-    authDomain: "control-de-pesos-productos.firebaseapp.com",
-    databaseURL: "https://control-de-pesos-productos-default-rtdb.firebaseio.com",
-    projectId: "control-de-pesos-productos",
-    storageBucket: "control-de-pesos-productos.firebasestorage.app",
-    messagingSenderId: "462400274702",
-    appId: "1:462400274702:web:3de417a4d8aba3289e575f",
-    measurementId: "G-Y1KSWVVC59"
-  };
+  <!-- Módulos de Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
+    // Credenciales de Firebase de tu proyecto
+    const firebaseConfig = {
+      apiKey: "AIzaSyBo6w41Ruto2iOo9-XBiCypTDtF7fvE0yU",
+      authDomain: "control-de-pesos-productos.firebaseapp.com",
+      databaseURL: "https://control-de-pesos-productos-default-rtdb.firebaseio.com",
+      projectId: "control-de-pesos-productos",
+      storageBucket: "control-de-pesos-productos.firebasestorage.app",
+      messagingSenderId: "462400274702",
+      appId: "1:462400274702:web:3de417a4d8aba3289e575f",
+      measurementId: "G-Y1KSWVVC59"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Asignar al ámbito global para la app
+    window.db = db;
+    window.collection = collection;
+    window.addDoc = addDoc;
+    window.onSnapshot = onSnapshot;
+    window.query = query;
+    window.orderBy = orderBy;
+    window.deleteDoc = deleteDoc;
+    window.doc = doc;
+    window.updateDoc = updateDoc;
+  </script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen pb-12">
+
+  <!-- Encabezado Principal -->
+  <header class="bg-indigo-700 text-white shadow-lg sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-scale-balanced text-2xl text-indigo-200"></i>
+        <h1 class="text-xl font-bold tracking-wide">Control de Pesos <span class="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-normal">Sincronizado 🔴 En Vivo</span></h1>
+      </div>
+      <div class="flex items-center gap-2 bg-indigo-800 px-3 py-1.5 rounded-lg border border-indigo-600 w-full md:w-auto">
+        <i class="fa-solid fa-user-gear text-indigo-300"></i>
+        <input type="text" id="nombreOperador" placeholder="Tu Nombre / Operador" class="bg-transparent text-white placeholder-indigo-300 text-sm focus:outline-none w-full md:w-48">
+      </div>
+    </div>
+  </header>
+
+  <!-- Navegación por pestañas -->
+  <div class="bg-white border-b border-gray-200 sticky top-[60px] z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 flex justify-around md:justify-start gap-2 overflow-x-auto text-sm font-medium">
+      <button onclick="cambiarTab('registrar')" id="tab-registrar" class="py-3 px-4 text-indigo-600 border-b-2 border-indigo-600 flex items-center gap-2">
+        <i class="fa-solid fa-pen-to-square"></i> <span>Registrar Lote</span>
+      </button>
+      <button onclick="cambiarTab('historial')" id="tab-historial" class="py-3 px-4 text-gray-500 hover:text-indigo-600 border-b-2 border-transparent flex items-center gap-2">
+        <i class="fa-solid fa-clock-rotate-left"></i> <span>Historial (En vivo)</span>
+      </button>
+      <button onclick="cambiarTab('graficas')" id="tab-graficas" class="py-3 px-4 text-gray-500 hover:text-indigo-600 border-b-2 border-transparent flex items-center gap-2">
+        <i class="fa-solid fa-chart-line"></i> <span>Gráficas y Calidad</span>
+      </button>
+      <button onclick="cambiarTab('productos')" id="tab-productos" class="py-3 px-4 text-gray-500 hover:text-indigo-600 border-b-2 border-transparent flex items-center gap-2">
+        <i class="fa-solid fa-boxes-stacked"></i> <span>Productos</span>
+      </button>
+    </div>
+  </div>
+
+  <main class="max-w-7xl mx-auto px-4 mt-6">
+
+    <!-- 1. PESTAÑA: REGISTRAR LOTE -->
+    <section id="sec-registrar" class="block space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto">
+        <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <i class="fa-solid fa-plus-circle text-indigo-600"></i> Nuevo Pesaje de Producción
+        </h2>
+        <form id="formRegistro" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Producto</label>
+            <select id="regProducto" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm" required>
+              <!-- Dinámico -->
+            </select>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Número de Lote / Batch</label>
+              <input type="text" id="regLote" placeholder="Ej: LOTE-2026-05" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm" required>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Peso Medido (Gramos)</label>
+              <input type="number" step="0.01" id="regPeso" placeholder="Ej: 154.5" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm" required>
+            </div>
+          </div>
+
+          <!-- Caja de Cálculo de Volumen Automático -->
+          <div id="cajaVolumen" class="hidden p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-800 flex justify-between items-center">
+            <span><i class="fa-solid fa-flask"></i> Volumen Calculado:</span>
+            <strong id="valVolumen" class="text-indigo-950 font-mono text-base">0 mL</strong>
+          </div>
+
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow transition duration-150 flex justify-center items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Guardar y Sincronizar en Vivo
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 2. PESTAÑA: HISTORIAL -->
+    <section id="sec-historial" class="hidden space-y-4">
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <h2 class="text-lg font-bold text-gray-800">Historial Sincronizado en Tiempo Real</h2>
+          <button onclick="exportarCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-lg flex items-center gap-2 font-medium">
+            <i class="fa-solid fa-file-excel"></i> Exportar a CSV / Excel
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-100 text-gray-600 uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="p-3">Fecha / Hora</th>
+                <th class="p-3">Operador</th>
+                <th class="p-3">Producto</th>
+                <th class="p-3">Lote</th>
+                <th class="p-3">Peso (g)</th>
+                <th class="p-3">Volumen</th>
+                <th class="p-3 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tablaCuerpo" class="divide-y divide-gray-100">
+              <tr><td colspan="7" class="p-4 text-center text-gray-400">Cargando registros compartidos...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. PESTAÑA: GRÁFICAS -->
+    <section id="sec-graficas" class="hidden space-y-6">
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+        <div class="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+          <div>
+            <h2 class="text-lg font-bold text-gray-800">Tendencia de Pesos de Producción</h2>
+            <p class="text-xs text-gray-500">Visualiza las desviaciones del peso meta por producto</p>
+          </div>
+          <select id="filtroProductoGrafica" onchange="actualizarGrafica()" class="p-2 border border-gray-300 rounded-lg text-sm bg-white font-medium">
+            <!-- Dinámico -->
+          </select>
+        </div>
+
+        <!-- Indicadores Métricos de Calidad -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+            <span class="text-xs text-blue-600 uppercase font-semibold">Peso Promedio</span>
+            <div id="statPromedio" class="text-lg font-bold text-blue-900">0 g</div>
+          </div>
+          <div class="bg-amber-50 p-3 rounded-lg border border-amber-100">
+            <span class="text-xs text-amber-600 uppercase font-semibold">Mín / Máx</span>
+            <div id="statMinMax" class="text-lg font-bold text-amber-900">0 / 0 g</div>
+          </div>
+          <div class="bg-purple-50 p-3 rounded-lg border border-purple-100">
+            <span class="text-xs text-purple-600 uppercase font-semibold">Desviación (σ)</span>
+            <div id="statDesviacion" class="text-lg font-bold text-purple-900">0.00</div>
+          </div>
+          <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+            <span class="text-xs text-emerald-600 uppercase font-semibold">Total Lotes</span>
+            <div id="statTotal" class="text-lg font-bold text-emerald-900">0</div>
+          </div>
+        </div>
+
+        <div class="relative h-72 w-full">
+          <canvas id="chartPesos"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. PESTAÑA: PRODUCTOS (CONFIG) -->
+    <section id="sec-productos" class="hidden space-y-6">
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto">
+        <h2 class="text-lg font-bold text-gray-800 mb-4">Añadir / Editar Producto</h2>
+        <form id="formProducto" class="space-y-4">
+          <input type="hidden" id="prodEditId">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Nombre del Producto</label>
+              <input type="text" id="prodNombre" placeholder="Ej: Salsa Picante 500cc" class="w-full p-2.5 border rounded-lg text-sm" required>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Peso Meta (Gramos)</label>
+              <input type="number" step="0.1" id="prodMeta" placeholder="Ej: 520" class="w-full p-2.5 border rounded-lg text-sm" required>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Tiene Densidad (g/mL)</label>
+              <select id="prodUsaDensidad" onchange="toggleInputDensidad()" class="w-full p-2.5 border rounded-lg text-sm bg-white">
+                <option value="si">Sí (Salsas / Vinagres)</option>
+                <option value="no">No (Registro directo en Gramos)</option>
+              </select>
+            </div>
+            <div id="divDensidad">
+              <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Densidad (g/cm³)</label>
+              <input type="number" step="0.001" id="prodDensidad" placeholder="Ej: 1.15" value="1.0" class="w-full p-2.5 border rounded-lg text-sm">
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2.5 rounded-lg text-sm">
+            Guardar Producto en Catálogo
+          </button>
+        </form>
+      </div>
+
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
+        <h3 class="text-md font-bold text-gray-800 mb-3">Catálogo Actual de Productos</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-[11px]">
+              <tr>
+                <th class="p-2">Producto</th>
+                <th class="p-2">Peso Meta</th>
+                <th class="p-2">Densidad</th>
+                <th class="p-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaProductosCat" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- LÓGICA JAVASCRIPT DE LA PWA -->
+  <script>
+    // Catálogo de Productos iniciales
+    let productos = JSON.parse(localStorage.getItem('prod_catalogo')) || [
+      { id: '1', nombre: 'Salsa Soya 150cc', meta: 172, densidad: 1.15, usaDensidad: true },
+      { id: '2', nombre: 'Salsa Soya 300cc', meta: 345, densidad: 1.15, usaDensidad: true },
+      { id: '3', nombre: 'Salsa Soya 3.8L', meta: 4370, densidad: 1.15, usaDensidad: true },
+      { id: '4', nombre: 'Salsa Inglesa 150cc', meta: 165, densidad: 1.10, usaDensidad: true },
+      { id: '5', nombre: 'Salsa Inglesa 300cc', meta: 330, densidad: 1.10, usaDensidad: true },
+      { id: '6', nombre: 'Salsa Inglesa 3.8L', meta: 4180, densidad: 1.10, usaDensidad: true },
+      { id: '7', nombre: 'Salsa Ajo 150cc', meta: 162, densidad: 1.08, usaDensidad: true },
+      { id: '8', nombre: 'Salsa Ajo 300cc', meta: 324, densidad: 1.08, usaDensidad: true },
+      { id: '9', nombre: 'Salsa Ajo 3.8L', meta: 4104, densidad: 1.08, usaDensidad: true },
+      { id: '10', nombre: 'Salsa picante 150cc', meta: 157, densidad: 1.05, usaDensidad: true },
+      { id: '11', nombre: 'Salsa Extra picante 150cc', meta: 157, densidad: 1.05, usaDensidad: true },
+      { id: '12', nombre: 'Vinagre 1L', meta: 1010, densidad: 1.01, usaDensidad: true },
+      { id: '13', nombre: 'Vinagre 500mL', meta: 505, densidad: 1.01, usaDensidad: true },
+      { id: '14', nombre: 'Vinagre 3.8L', meta: 3838, densidad: 1.01, usaDensidad: true },
+      { id: '15', nombre: 'Mayonesa 175g', meta: 175, densidad: 0, usaDensidad: false },
+      { id: '16', nombre: 'Mayonesa 445g', meta: 445, densidad: 0, usaDensidad: false },
+      { id: '17', nombre: 'Mostaza 250g', meta: 250, densidad: 0, usaDensidad: false },
+      { id: '18', nombre: 'Maiz 240g', meta: 240, densidad: 0, usaDensidad: false },
+      { id: '19', nombre: 'Tocineta 240g', meta: 240, densidad: 0, usaDensidad: false },
+      { id: '20', nombre: 'Preparado 460g', meta: 460, densidad: 0, usaDensidad: false },
+      { id: '21', nombre: 'Ketchup 397g', meta: 397, densidad: 0, usaDensidad: false },
+      { id: '22', nombre: 'Ketchup 198g', meta: 198, densidad: 0, usaDensidad: false }
+    ];
+
+    let registrosGlobales = [];
+    let chartInstance = null;
+
+    window.addEventListener('load', () => {
+      renderSelects();
+      renderTablaCat();
+
+      // Cálculo de volumen dinámico
+      document.getElementById('regProducto').addEventListener('change', actualizarCalculoVolumen);
+      document.getElementById('regPeso').addEventListener('input', actualizarCalculoVolumen);
+
+      // Iniciar escucha en tiempo real de Firebase
+      escucharFirebase();
+    });
+
+    function guardarCatalogoLocal() {
+      localStorage.setItem('prod_catalogo', JSON.stringify(productos));
+      renderSelects();
+      renderTablaCat();
+    }
+
+    function renderSelects() {
+      const selReg = document.getElementById('regProducto');
+      const selGraf = document.getElementById('filtroProductoGrafica');
+      
+      selReg.innerHTML = productos.map(p => `<option value="${p.nombre}">${p.nombre}</option>`).join('');
+      selGraf.innerHTML = productos.map(p => `<option value="${p.nombre}">${p.nombre}</option>`).join('');
+      actualizarCalculoVolumen();
+    }
+
+    function actualizarCalculoVolumen() {
+      const prodNombre = document.getElementById('regProducto').value;
+      const peso = parseFloat(document.getElementById('regPeso').value) || 0;
+      const prod = productos.find(p => p.nombre === prodNombre);
+      const caja = document.getElementById('cajaVolumen');
+
+      if (prod && prod.usaDensidad && prod.densidad > 0 && peso > 0) {
+        caja.classList.remove('hidden');
+        const vol = peso / prod.densidad;
+        if (vol >= 1000) {
+          document.getElementById('valVolumen').innerText = (vol / 1000).toFixed(3) + ' L';
+        } else {
+          document.getElementById('valVolumen').innerText = vol.toFixed(1) + ' mL';
+        }
+      } else {
+        caja.classList.add('hidden');
+      }
+    }
+
+    // Escuchador de Firestore en tiempo real
+    function escucharFirebase() {
+      const q = window.query(window.collection(window.db, "registros_pesos"), window.orderBy("fecha", "desc"));
+      
+      window.onSnapshot(q, (snapshot) => {
+        registrosGlobales = [];
+        snapshot.forEach((docSnap) => {
+          registrosGlobales.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        renderHistorial();
+        actualizarGrafica();
+      });
+    }
+
+    // Formulario de Registro
+    document.getElementById('formRegistro').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const producto = document.getElementById('regProducto').value;
+      const lote = document.getElementById('regLote').value;
+      const peso = parseFloat(document.getElementById('regPeso').value);
+      const operador = document.getElementById('nombreOperador').value || 'Operador Anónimo';
+      
+      const prod = productos.find(p => p.nombre === producto);
+      let volumen = 0;
+      if (prod && prod.usaDensidad && prod.densidad > 0) {
+        volumen = peso / prod.densidad;
+      }
+
+      try {
+        await window.addDoc(window.collection(window.db, "registros_pesos"), {
+          producto,
+          lote,
+          peso,
+          volumen,
+          operador,
+          fecha: new Date()
+        });
+        document.getElementById('regPeso').value = '';
+        document.getElementById('regLote').value = '';
+        actualizarCalculoVolumen();
+        alert('✅ Pesaje registrado y sincronizado.');
+      } catch (err) {
+        alert('Error al guardar: ' + err.message);
+      }
+    });
+
+    // Renderizar Historial
+    function renderHistorial() {
+      const tbody = document.getElementById('tablaCuerpo');
+      if (registrosGlobales.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-400">No hay registros guardados.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = registrosGlobales.map(r => {
+        const fechaStr = r.fecha ? new Date(r.fecha.seconds * 1000).toLocaleString() : 'Reciente';
+        const volText = r.volumen > 0 ? (r.volumen >= 1000 ? (r.volumen/1000).toFixed(2)+' L' : r.volumen.toFixed(1)+' mL') : '-';
+
+        return `
+          <tr class="hover:bg-gray-50">
+            <td class="p-3 text-gray-500 text-xs">${fechaStr}</td>
+            <td class="p-3 font-medium text-indigo-700">${r.operador || 'Anónimo'}</td>
+            <td class="p-3 font-semibold">${r.producto}</td>
+            <td class="p-3 font-mono text-xs">${r.lote}</td>
+            <td class="p-3 font-bold">${r.peso} g</td>
+            <td class="p-3 text-indigo-900">${volText}</td>
+            <td class="p-3 text-right">
+              <button onclick="eliminarRegistro('${r.id}')" class="text-red-500 hover:text-red-700 text-xs"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function eliminarRegistro(id) {
+      if (confirm('¿Deseas borrar este registro?')) {
+        await window.deleteDoc(window.doc(window.db, "registros_pesos", id));
+      }
+    }
+
+    // Gráficas de Tendencia
+    function actualizarGrafica() {
+      const prodNombre = document.getElementById('filtroProductoGrafica').value;
+      const datos = registrosGlobales.filter(r => r.producto === prodNombre).reverse();
+
+      const labels = datos.map(d => d.lote || 'Sin Lote');
+      const pesos = datos.map(d => d.peso);
+      const prodMeta = productos.find(p => p.nombre === prodNombre)?.meta || 0;
+
+      // Calcular Estadísticas
+      if (pesos.length > 0) {
+        const sum = pesos.reduce((a, b) => a + b, 0);
+        const avg = sum / pesos.length;
+        const min = Math.min(...pesos);
+        const max = Math.max(...pesos);
+        const stdDev = Math.sqrt(pesos.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b, 0) / pesos.length);
+
+        document.getElementById('statPromedio').innerText = avg.toFixed(1) + ' g';
+        document.getElementById('statMinMax').innerText = `${min} /${max} g`;
+        document.getElementById('statDesviacion').innerText = stdDev.toFixed(2);
+        document.getElementById('statTotal').innerText = pesos.length;
+      } else {
+        document.getElementById('statPromedio').innerText = '0 g';
+        document.getElementById('statMinMax').innerText = '0 / 0 g';
+        document.getElementById('statDesviacion').innerText = '0.00';
+        document.getElementById('statTotal').innerText = '0';
+      }
+
+      const ctx = document.getElementById('chartPesos').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Peso Medido (g)',
+              data: pesos,
+              borderColor: '#4f46e5',
+              backgroundColor: 'rgba(79, 70, 229, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.2
+            },
+            {
+              label: 'Peso Meta (g)',
+              data: Array(labels.length).fill(prodMeta),
+              borderColor: '#ef4444',
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'top' } },
+          scales: { y: { beginAtZero: false } }
+        }
+      });
+    }
+
+    // Exportar CSV
+    function exportarCSV() {
+      let csv = 'Fecha,Operador,Producto,Lote,Peso (g),Volumen\n';
+      registrosGlobales.forEach(r => {
+        const fecha = r.fecha ? new Date(r.fecha.seconds * 1000).toLocaleString() : '';
+        csv += `"${fecha}","${r.operador || ''}","${r.producto}","${r.lote}",${r.peso},${r.volumen || 0}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte_pesos_${new Date().toISOString().slice(0,10)}.csv`; a.click(); }  // Navegación Tabs function cambiarTab(tab) { ['registrar', 'historial', 'graficas', 'productos'].forEach(t => { document.getElementById(`sec-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).classList.remove('text-indigo-600', 'border-indigo-600'); document.getElementById(`tab-${t}`).classList.add('text-gray-500', 'border-transparent');
+      });
+
+      document.getElementById(`sec-${tab}`).classList.remove('hidden'); document.getElementById(`tab-${tab}`).classList.add('text-indigo-600', 'border-indigo-600');
+      
+      if (tab === 'graficas') actualizarGrafica();
+    }
+
+    // Config de Productos
+    function toggleInputDensidad() {
+      const usa = document.getElementById('prodUsaDensidad').value === 'si';
+      document.getElementById('divDensidad').style.display = usa ? 'block' : 'none';
+    }
+
+    document.getElementById('formProducto').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('prodEditId').value || Date.now().toString();
+      const nombre = document.getElementById('prodNombre').value;
+      const meta = parseFloat(document.getElementById('prodMeta').value);
+      const usaDensidad = document.getElementById('prodUsaDensidad').value === 'si';
+      const densidad = usaDensidad ? parseFloat(document.getElementById('prodDensidad').value) : 0;
+
+      const idx = productos.findIndex(p => p.id === id);
+      if (idx >= 0) {
+        productos[idx] = { id, nombre, meta, densidad, usaDensidad };
+      } else {
+        productos.push({ id, nombre, meta, densidad, usaDensidad });
+      }
+
+      guardarCatalogoLocal();
+      document.getElementById('formProducto').reset();
+      document.getElementById('prodEditId').value = '';
+      alert('Producto guardado correctamente.');
+    });
+
+    function renderTablaCat() {
+      const tbody = document.getElementById('tablaProductosCat');
+      tbody.innerHTML = productos.map(p => `
+        <tr>
+          <td class="p-2 font-medium">${p.nombre}</td>
+          <td class="p-2">${p.meta} g</td>
+          <td class="p-2">${p.usaDensidad ? p.densidad + ' g/mL' : 'N/A'}</td>
+          <td class="p-2 text-right">
+            <button onclick="borrarProd('${p.id}')" class="text-red-500 hover:text-red-700 text-xs"><i class="fa-solid fa-trash"></i></button
